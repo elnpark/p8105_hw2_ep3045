@@ -1,0 +1,171 @@
+---
+title: "P8105_HW2_EP3045"
+author: "Ellen Park"
+date: "2022-10-04"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(readxl)
+
+```
+
+#Problem 1
+```{r nyc transit data}
+setwd("~/COLUMBIA/Fall 2022/DATA SCIENCE/p8105_hw2_ep3045")
+
+nyc = 
+  read_csv(
+    "NYC_Transit_Subway_Entrance_And_Exit_Data.csv",
+    col_types = cols(Route8 = "c", Route9 = "c", Route10 = "c", Route11 = "c")) %>% 
+  janitor::clean_names() %>% 
+  select(
+    line, station_name, station_latitude, station_longitude, 
+    starts_with("route"), entry, exit_only, vending, entrance_type, 
+    ada) %>% 
+  mutate(entry = ifelse(entry == "YES", TRUE, FALSE)) %>%
+  mutate(vending = ifelse(vending == "YES", TRUE, FALSE))
+```
+In this dataset, we are able to see the different subway lines, the subway names, and location (latitude and longitude). The 11 routes that the subway lines travel on are also visible. We are able to see if there is a vending machine, if there is an entrance, what type of entrance, and also if the station itself is ADA compliant. There are 19 columns and 1868 rows in this dataset. I cleaned the names in the dataset, and selected the specific variables we will be using. The data is not tidy because there are many N/A variables, and there are 11 different columns specifying routes instead of one large column. 
+
+```{r nyc questions}
+nyc %>%
+  distinct(station_name) %>%
+  nrow()
+
+nyc %>%
+  filter(ada==TRUE) %>%
+  nrow()
+
+nyc1 <- nyc %>%
+  filter(vending == "FALSE") %>%
+  group_by(vending, entry) %>%
+  summarize(n=n()) %>%
+  mutate(prop=n/sum(n))
+nyc1
+
+```
+There are 356 distinct subway stations in New York City.
+468 station entrances in NYC are ADA compliant. 
+0.3770 of stations, or 37.7% of stations allow entrance without vending. 
+
+
+```{r tidy}
+tidy = nyc %>%
+  pivot_longer(
+    route1:route11,
+    names_to = "route_number",
+    values_to = "route_line") %>% 
+  relocate("route_line") %>% 
+  drop_na(route_line) %>% 
+  view()
+
+atrain = 
+  filter(tidy, route_line == "A")
+```
+In our final dataset, there are a total of `r nrow(tidy)` rows and `r ncol(tidy)` columns. The data is tidy in the final dataset as route line has been condensed into 1 variable and the NA responses are no longer present.
+
+There are `r count(distinct(atrain, station_name, line))` distinct stations that serve the A train.
+
+Of the stations that serve the A train, `r filter(atrain, ada == TRUE) %>% distinct(station_name, line) %>% nrow` stations are ADA compliant.
+
+#Problem 2
+```{r problem two}
+mr <-
+  read_excel("Trash Wheel Collection Data.xlsx",
+  sheet = "Mr. Trash Wheel",
+  range = "A2:N549") %>% 
+  janitor::clean_names() %>% 
+  drop_na(dumpster) %>% 
+  mutate(sports_balls = round(sports_balls, 0))
+  as.integer(pull(mr, sports_balls))
+  
+mr$name <- "Mr. Trash Wheel"
+  
+professor <-
+  read_excel("Trash Wheel Collection Data.xlsx",
+  sheet = "Professor Trash Wheel",
+  range = "A2:M96") %>% 
+  janitor::clean_names() %>% 
+  drop_na(dumpster) 
+
+professor$name <- "Professor Trash Wheel"
+
+trash <-
+  full_join(mr, professor, by = "dumpster")
+
+```
+One key variable to note are homes_powered as a result of these trash wheels, as well as cigarette_butts, as the number collected from the ground is astounding. The number of observations in this dataset are 547, with 27 variables. 
+
+```{r problem two questions}
+sum(professor$weight_tons)
+
+sum(mr$sports_balls)
+
+```
+The total weight of trash collected by Professor Trash Wheel were 190.12 tons 
+The total number of sports bar collected by Mr. Trash Wheel in 2020 were 6877
+
+#Problem 3
+```{r problem three}
+pols <- 
+  read_csv("pols-month.csv") %>%
+  janitor::clean_names() %>%
+  separate(col = mon, into = c("year","month", "day")) %>% 
+  mutate(across(.col = c(year, month, day), as.integer)) %>% 
+  mutate(month = month.name[month]) %>% 
+  mutate(president = case_when(prez_gop == 1 ~ "gop", prez_gop == 2 ~ "gop", prez_dem == 1 ~ "dem")) %>% 
+  select(-day, -prez_dem, -prez_gop) %>% 
+  select(year, month, president, everything())
+
+snp <- 
+  read_csv("snp.csv") %>%
+  janitor::clean_names() %>% 
+  separate(date, sep = "/", into = c("month", "day", "year")) %>%
+  mutate(across(.cols = c("month", "day", "year"), as.integer)) %>%
+  mutate(month = month.name[month]) %>%
+  mutate(year = ifelse(year > 21, 1900 + year, 2000 + year)) %>%
+  select(year, month, close)
+
+unemployment <- 
+  read_csv("unemployment.csv") %>%
+  janitor::clean_names() %>%
+  pivot_longer(
+  jan:dec,
+  names_to = "month", 
+  values_to = "percentage") %>% 
+  mutate(across(.col = c(year), as.integer)) %>% 
+  mutate(month = recode(month, "jan" = "January", "feb" = "February", "mar" = "March", "apr" = "April", "may" = "May", "jun" = "June", "jul" = "July", "aug" = "August", "sep" = "September", "oct" = "October", "nov" = "November", "dec" = "December"))
+
+ps_merged <-
+  left_join(pols, snp, by = c("year", "month"))
+
+merged <-
+  left_join(ps_merged, unemployment, by = c("year", "month"))
+
+pols_names = pols %>% names()
+pols_dimension = pols %>%  dim()
+pols_yrrange = pols %>% 
+  select(year) %>% 
+  range()
+snp_names = snp %>% names()
+snp_dimension = snp %>% dim()
+snp_yrrange = snp %>% 
+  select(year) %>% 
+  range()
+unemployment_names = unemployment %>% names()
+unemployment_dimension = unemployment %>% dim()
+unemployment_yrrange = unemployment %>% 
+  select(year) %>% 
+  range()
+```
+
+The pols-month data set contains data regarding politicians and whether they are democratic or republican. The important variables are `r pols_names`. The dimensions for the data set are `r pols_dimension`. The range of years for the data set are `r pols_yrrange`. 
+
+The snp data set contains data that regarding Standard & Poor’s stock market index. The important variables are `r snp_names`. The dimensions for the data set are `r snp_dimension`. The range of years for the data set are `r snp_yrrange`. 
+
+The unemployment data set contains data regarding the percentage of unemployment for specific years and months. The important variables are `r unemployment_names`. The dimensions for the data set are `r unemployment_dimension`. The range of years for the data set are `r unemployment_yrrange`. 
+
